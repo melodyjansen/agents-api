@@ -1,6 +1,6 @@
 # AI Agents API
 
-FastAPI-based AI-powered content generation through specialized agents for creating PowerPoint presentations, writing content, and performing basic predictions.
+FastAPI-based LLM-powered content generation through specialized agents for creating PowerPoint presentations, writing content, and performing basic predictions.
 
 ## Features
 
