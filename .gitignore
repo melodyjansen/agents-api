@@ -1,0 +1,15 @@
+# Environment variables 
+.env
+.env
+__pycache__/
+
+# Generated files
+uploads/
+outputs/
+*.pptx
+*.txt
+*.pdf
+
+# Logs
+*.log
+logs/
