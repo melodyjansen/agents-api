@@ -6,7 +6,7 @@ FastAPI-based AI-powered content generation through specialized agents for creat
 
 - **PowerPoint Agent**: Creates formatted presentations on any topic
 - **Content Writer Agent**: Generates articles, reports, and summaries
-- **Predictor Agent**: Performs basic linear regression analysis
+- **Predictor Agent**: Performs (very) basic linear regression analysis
 - **Orchestrator**: Routes requests to appropriate agents via natural language
 
 ## Setup
