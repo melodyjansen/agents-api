@@ -101,6 +101,7 @@ class PowerPointAgent:
             }
 
     def _get_fallback_content(self, topic: str, slide_number: int, slide_type: str) -> Dict:
+        # TODO: instead of this maybe next try parsing through pypandoc
         if slide_type == "title":
             return {"title": topic, "subtitle": "Overview", "visual": None}
         else:
@@ -191,3 +192,174 @@ class PowerPointAgent:
                 "success": False,
                 "error": f"PowerPoint creation failed: {str(e)}"
             }
+        
+    def create_presentation_from_content(self, processed_content: str, approach: str, slides: int, source_files: List[str], query: Optional[str] = None) -> Dict:
+        """Create a PowerPoint from extracted file content (query-aware)"""
+        try:
+            prs = Presentation()
+            theme = self._pick_theme()
+
+            print(f"Query in create_presentation_from_content: {query}")
+
+            # Generate everything at once
+            all_slides = self._generate_slides_from_content(processed_content, slides, query=query)
+
+            # Title slide
+            title_slide = prs.slides.add_slide(prs.slide_layouts[0])
+            title_slide.shapes.title.text = all_slides["titles"][0]
+
+            # Build subtitle from first slide's bullets
+            subtitle_text = "; ".join(all_slides["bulletpoints"][0])
+
+            title_slide.placeholders[1].text = subtitle_text
+
+            bg = title_slide.background.fill
+            bg.solid()
+            bg.fore_color.rgb = theme["bg"]
+
+            # Remaining slides
+            for i in range(1, len(all_slides["slides"])):
+                slide = prs.slides.add_slide(prs.slide_layouts[1])
+
+                bg = slide.background.fill
+                bg.solid()
+                bg.fore_color.rgb = theme["bg"]
+
+                title_shape = slide.shapes.title
+                title_shape.text = all_slides["titles"][i]
+                title_shape.text_frame.paragraphs[0].font.size = Pt(32)
+                title_shape.text_frame.paragraphs[0].font.bold = True
+                title_shape.text_frame.paragraphs[0].font.color.rgb = theme["accent"]
+
+                body_shape = slide.placeholders[1]
+                body_shape.text = "\n".join(all_slides["bulletpoints"][i])
+
+            # Save file
+            safe_name = "Content_Presentation"
+            filename = f"AI_{safe_name}.pptx"
+            filepath = os.path.join(Config.OUTPUT_DIR, filename)
+            prs.save(filepath)
+
+
+            return {
+                "success": True,
+                "message": f"Created {slides}-slide deck from content",
+                "filename": filename,
+                "filepath": filepath,
+                "slides_count": slides,
+                "approach": approach,
+                "query": query
+            }
+
+        except Exception as e:
+            return {"success": False, "error": f"Content-based PowerPoint failed: {str(e)}"}
+        
+    def _generate_slides_from_content(self, content: str, total_slides: int, query: Optional[str] = None) -> List[Dict]:
+        """Generate all slides in one call using simple structured format"""
+        
+        # Build focused instruction
+        if query:
+            focus_instruction = f"Focus specifically on '{query}' from the content below. Extract information related to {query}."
+        else:
+            focus_instruction = "Extract key information from the content below."
+        
+        print(f"Focus instruction: {focus_instruction}")
+
+        # Truncate content to fit within token limits while preserving key information
+        max_content_length = 8000  # Leave more room for the response
+        if len(content) > max_content_length:
+            # Try to keep query-relevant content if possible
+            if query and query.lower() in content.lower():
+                # Find sections that mention the query
+                query_pos = content.lower().find(query.lower())
+                start_pos = max(0, query_pos - 1000)
+                content = content[start_pos:start_pos + max_content_length] + "..."
+            else:
+                content = content[:max_content_length] + "..."
+
+        if total_slides is None:
+            total_slides = 4  # Default to 4 slides if not specified
+
+        print(f"We are creating a total of {total_slides} slides.")
+        
+        prompt = f"""{focus_instruction}
+
+    Create exactly {total_slides} slides using the following structured format. Fill in everything between square brackets, keeping the rest of the template as is:
+
+**SLIDE 1: [Main Topic Title]**
+* [Key overview point 1]
+* [Key overview point 2]
+
+**SLIDE 2: [Specific Aspect]**
+* [Key point 1]  
+* [Key point 2]
+* [Key point n]
+
+**SLIDE [n]: [Another Key Aspect]**
+* [Key point 1]
+* [Key point 2]
+* [Key point n]
+
+- Follow the format exactly, for up to {total_slides} slides.
+- Do not add extra slides, sections, text, or markdown.
+- At least 3 key points per slide, max 5. There should be variation in the amount of key points per slide.
+- Every point should be a concise, punchy phrase (max 10 words, no period at the end of the point).
+- Titles should be engaging and informative (max 7 words).
+
+    CONTENT TO ANALYZE:
+    {content}"""
+
+        try:
+            response = self.llm.generate(prompt, max_tokens=1200, model="gemma2-9b-it")
+            print(f"Structured response received, parsing...")
+            print(f"Response: {response}")
+            
+            # Parse the structured text response
+            slides = self._parse_slides(response)
+            print(f"Parsed slides: {slides}")
+
+            return slides
+            
+        except Exception as e:
+            print(f"Slide generation error: {e}")
+            return self._create_fallback_slides(total_slides, query, content)
+
+    def _parse_slides(self, text: str) -> dict:
+        # Regex to capture slide headers
+        slide_pattern = re.compile(r"\*\*SLIDE\s+(\d+):\s*(.*?)\*\*", re.IGNORECASE)
+
+        # Find all slide matches with their positions
+        matches = list(slide_pattern.finditer(text))
+        
+        slides = []
+        titles = []
+        bulletpoints = []
+
+        for i, match in enumerate(matches):
+            slide_num = int(match.group(1))
+            title = match.group(2).strip()
+
+            # Start of this slide content
+            start = match.end()
+            # End is either the start of the next slide or end of text
+            end = matches[i+1].start() if i + 1 < len(matches) else len(text)
+
+            # Extract content between this slide and the next
+            slide_content = text[start:end]
+
+            # Collect bullet points (lines starting with *)
+            bullets = [
+                line.strip().lstrip("*").strip()
+                for line in slide_content.splitlines()
+                if line.strip().startswith("*")
+            ]
+
+            slides.append(slide_num)
+            titles.append(title)
+            bulletpoints.append(bullets)
+
+        return {
+            "slides": slides,
+            "titles": titles,
+            "bulletpoints": bulletpoints
+        }

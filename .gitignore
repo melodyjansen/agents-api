@@ -6,8 +6,11 @@ __pycache__/
 # Generated files
 uploads/
 outputs/
+tmp/
 *.pptx
 *.txt
+!requirements.txt
+*.docx
 *.pdf
 
 # Logs

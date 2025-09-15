@@ -4,18 +4,19 @@ FastAPI main application file
 
 import os
 import datetime
-from typing import Dict, Any
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from typing import Dict, Any, Optional, List
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from uuid import uuid4
 import uvicorn
 
 from config import Config
 from Orchestrator import Orchestrator
 from api_models import (
-    GeneralRequest, PresentationRequest, ContentRequest, PredictionRequest,
-    BaseResponse, PresentationResponse, ContentResponse, PredictionResponse, 
+    GeneralRequest, PresentationRequest, ContentRequest, PredictionRequest, 
+    PresentationResponse, ContentResponse, PredictionResponse, 
     HelpResponse, HealthResponse
 )
 
@@ -40,11 +41,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files (for serving generated files)
+# Mount static files 
 if not os.path.exists(Config.OUTPUT_DIR):
     os.makedirs(Config.OUTPUT_DIR)
-    
+
+if not os.path.exists(Config.UPLOAD_DIR):
+    os.makedirs(Config.UPLOAD_DIR)
+
 app.mount("/files", StaticFiles(directory=Config.OUTPUT_DIR), name="files")
+app.mount("/uploads", StaticFiles(directory=Config.UPLOAD_DIR), name="uploads")
+
 
 # Initialize orchestrator
 orchestrator = Orchestrator(Config.GROQ_API_KEY)
@@ -85,6 +91,21 @@ async def chat(request: GeneralRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/upload")
+async def upload_files(message: str = Form(...), files: List[UploadFile] = File(...)):
+    """Upload files + message"""
+    try:
+        file_paths = []
+        for f in files:
+            unique_name = f"{uuid4()}_{f.filename}"
+            path = os.path.join(Config.UPLOAD_DIR, unique_name)
+            with open(path, "wb") as buffer:
+                buffer.write(await f.read())
+            file_paths.append(path)
+        result = orchestrator.handle_request(message, file_paths)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/presentation", response_model=PresentationResponse)
 async def create_presentation(request: PresentationRequest):
@@ -94,8 +115,7 @@ async def create_presentation(request: PresentationRequest):
         result = orchestrator.powerpoint_agent.create_presentation(
             topic=request.topic,
             slides=request.slides
-        )
-        
+        )        
         if not result.get("success", False):
             raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
             

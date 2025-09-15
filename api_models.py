@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 class GeneralRequest(BaseModel):
     message: str = Field(..., description="User request message", min_length=1)
 
-
 class PresentationRequest(BaseModel):
     topic: str = Field(..., description="Topic of the presentation")
     slides: int = Field(default=4, ge=1, le=20, description="Number of slides")

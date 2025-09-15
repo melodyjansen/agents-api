@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+python-pptx
+pandas
+scikit-learn
+requests
+python-multipart
+pydantic
+python-dotenv
+PyPDF2
+python-docx
+nltk
+sumy
+pypandoc-binary
