@@ -7,6 +7,7 @@ FastAPI-based LLM-powered content generation through specialized agents for crea
 - **PowerPoint Agent**: Creates formatted presentations on any topic
 - **Content Writer Agent**: Generates articles, reports, and summaries
 - **Predictor Agent**: Performs (very) basic linear regression analysis
+- **File Processor**: Processes input files and performs extractive summarization 
 - **Orchestrator**: Routes requests to appropriate agents via natural language
 
 ## Setup
@@ -16,7 +17,7 @@ FastAPI-based LLM-powered content generation through specialized agents for crea
 Install the required dependencies:
 
 ```bash
-pip install fastapi uvicorn python-pptx pandas scikit-learn python-dotenv pydantic requests
+pip install -r requirements.txt
 ```
 
 ### API Key Configuration
@@ -54,6 +55,7 @@ The API will be available at:
 
 ### General Chat
 - `POST /chat` - Natural language requests routed to appropriate agents
+- `POST /upload` - Natural language requests + file uploads, routed to appropriate agents
 
 ### Specialized Endpoints
 - `POST /presentation` - Create PowerPoint presentations
